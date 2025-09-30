@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>自転車バランスゲーム</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Lucide React アイコンのシンプルな代替
+        const Bike = ({ className, style }) => (
+            <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="5.5" cy="17.5" r="3.5"/>
+                <circle cx="18.5" cy="17.5" r="3.5"/>
+                <path d="M15 6a1 1 0 1 0 0-2 1 1 0 0 0 0 2z"/>
+                <path d="M12 17.5V14l-3-3 4-3 2 3h2"/>
+            </svg>
+        );
+
+        const Trophy = ({ className }) => (
+            <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+                <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+                <path d="M4 22h16"/>
+                <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+                <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+                <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+        );
+
+        const RotateCcw = ({ className }) => (
+            <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                <path d="M3 3v5h5"/>
+            </svg>
+        );
+
+        const Flag = ({ className, style }) => (
+            <svg className={className} style={style} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+                <line x1="4" x2="4" y1="22" y2="15"/>
+            </svg>
+        );
+
+        const BicycleGame = () => {
+          const [stage, setStage] = useState(1);
+          const [score, setScore] = useState(0);
+          const [highScore, setHighScore] = useState(0);
+          const [gameState, setGameState] = useState('menu');
+          const [bikePosition, setBikePosition] = useState(50);
+          const [progress, setProgress] = useState(0);
+          const gameLoopRef = useRef(null);
+          const keysPressed = useRef({});
+
+          const stages = [
+            { name: 'ステージ 1: 練習コース', roadWidth: 45, speed: 0.8, goal: 100 },
+            { name: 'ステージ 2: 街中コース', roadWidth: 40, speed: 1.0, goal: 100 },
+            { name: 'ステージ 3: 山道コース', roadWidth: 35, speed: 1.2, goal: 100 },
+            { name: 'ステージ 4: 高速道路', roadWidth: 30, speed: 1.4, goal: 100 },
+            { name: 'ステージ 5: エクストリーム', roadWidth: 25, speed: 1.6, goal: 100 }
+          ];
+
+          const currentStage = stages[stage - 1];
+
+          const generateRoadPath = (stageNum) => {
+            const points = [];
+            const segments = 20;
+            
+            for (let i = 0; i <= segments; i++) {
+              const t = i / segments;
+              let offset = 0;
+              
+              switch(stageNum) {
+                case 1:
+                  offset = Math.sin(t * Math.PI * 2) * 15;
+                  break;
+                case 2:
+                  offset = Math.sin(t * Math.PI * 3) * 20;
+                  break;
+                case 3:
+                  offset = Math.sin(t * Math.PI * 2.5) * 25 + Math.cos(t * Math.PI * 1.5) * 10;
+                  break;
+                case 4:
+                  offset = (t * 4 % 1 < 0.5 ? 1 : -1) * 20 * Math.sin(t * Math.PI * 4);
+                  break;
+                case 5:
+                  offset = Math.sin(t * Math.PI * 5) * 20 + Math.cos(t * Math.PI * 3) * 15;
+                  break;
+                default:
+                  offset = 0;
+              }
+              
+              points.push(50 + offset);
+            }
+            
+            return points;
+          };
+
+          const roadPath = generateRoadPath(stage);
+
+          useEffect(() => {
+            const handleKeyDown = (e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                e.preventDefault();
+                keysPressed.current[e.key] = true;
+              }
+            };
+
+            const handleKeyUp = (e) => {
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                keysPressed.current[e.key] = false;
+              }
+            };
+
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+
+            return () => {
+              window.removeEventListener('keydown', handleKeyDown);
+              window.removeEventListener('keyup', handleKeyUp);
+            };
+          }, []);
+
+          useEffect(() => {
+            if (gameState === 'playing') {
+              gameLoopRef.current = setInterval(() => {
+                setBikePosition(prev => {
+                  let newPos = prev;
+                  if (keysPressed.current['ArrowLeft']) {
+                    newPos = Math.max(0, prev - 1.2);
+                  }
+                  if (keysPressed.current['ArrowRight']) {
+                    newPos = Math.min(100, prev + 1.2);
+                  }
+
+                  const pathIndex = Math.floor((progress / 100) * (roadPath.length - 1));
+                  const roadCenter = roadPath[pathIndex];
+                  const roadHalfWidth = currentStage.roadWidth / 2;
+
+                  if (newPos < roadCenter - roadHalfWidth || newPos > roadCenter + roadHalfWidth) {
+                    setGameState('gameOver');
+                    if (score > highScore) {
+                      setHighScore(score);
+                    }
+                  }
+
+                  return newPos;
+                });
+
+                setProgress(prev => {
+                  const newProgress = prev + currentStage.speed;
+                  
+                  if (newProgress >= 100) {
+                    const newScore = score + currentStage.goal;
+                    setScore(newScore);
+                    
+                    if (stage < 5) {
+                      setStage(s => s + 1);
+                      setBikePosition(50);
+                      return 0;
+                    } else {
+                      setGameState('clear');
+                      if (newScore > highScore) {
+                        setHighScore(newScore);
+                      }
+                      return 100;
+                    }
+                  }
+                  
+                  return newProgress;
+                });
+
+                setScore(prev => prev + 1);
+              }, 50);
+            }
+
+            return () => {
+              if (gameLoopRef.current) {
+                clearInterval(gameLoopRef.current);
+              }
+            };
+          }, [gameState, score, stage, currentStage, highScore, progress, roadPath]);
+
+          const startGame = () => {
+            setGameState('playing');
+            setScore(0);
+            setStage(1);
+            setBikePosition(50);
+            setProgress(0);
+          };
+
+          const restartGame = () => {
+            startGame();
+          };
+
+          const pathIndex = Math.floor((progress / 100) * (roadPath.length - 1));
+          const roadCenter = roadPath[pathIndex];
+          const roadHalfWidth = currentStage?.roadWidth / 2 || 25;
+
+          return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-sky-400 to-sky-300 p-4">
+              {gameState === 'menu' && (
+                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                  <Bike className="w-20 h-20 mx-auto mb-4 text-blue-600" />
+                  <h1 className="text-4xl font-bold mb-4 text-gray-800">自転車バランスゲーム</h1>
+                  <p className="text-gray-600 mb-6">
+                    ←→キーで自転車を操作！<br />
+                    道から外れないように<br />
+                    ゴールまで進もう！
+                  </p>
+                  <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-4 mb-6">
+                    <Trophy className="w-8 h-8 mx-auto mb-2 text-yellow-600" />
+                    <p className="text-sm text-gray-700">ハイスコア: <span className="font-bold text-xl">{highScore}</span></p>
+                  </div>
+                  <button
+                    onClick={startGame}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-full text-xl transition transform hover:scale-105"
+                  >
+                    スタート
+                  </button>
+                </div>
+              )}
+
+              {gameState === 'playing' && (
+                <div className="relative">
+                  <div className="bg-white rounded-lg shadow-lg p-4 mb-4 w-full max-w-md">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="text-left">
+                        <p className="text-sm text-gray-600">ステージ {stage}/5</p>
+                        <p className="text-xs text-gray-500">{currentStage.name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-gray-600">スコア</p>
+                        <p className="text-2xl font-bold text-blue-600">{score}</p>
+                      </div>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden relative">
+                      <div 
+                        className="bg-green-500 h-full transition-all duration-100 rounded-full"
+                        style={{ width: `${progress}%` }}
+                      />
+                      <Flag className="absolute right-1 top-0 w-4 h-4 text-red-600" style={{ transform: 'translateY(-1px)' }} />
+                    </div>
+                    <p className="text-xs text-gray-500 text-center mt-1">
+                      ゴールまで {Math.round(100 - progress)}%
+                    </p>
+                  </div>
+
+                  <div className="relative w-80 h-96 bg-gray-700 rounded-lg overflow-hidden shadow-2xl">
+                    <div className="absolute inset-0 bg-gradient-to-b from-green-700 via-green-600 to-green-700" />
+                    
+                    <svg className="absolute inset-0 w-full h-full" style={{ pointerEvents: 'none' }}>
+                      {roadPath.map((center, i) => {
+                        if (i === roadPath.length - 1) return null;
+                        const y1 = (i / roadPath.length) * 100;
+                        const y2 = ((i + 1) / roadPath.length) * 100;
+                        const nextCenter = roadPath[i + 1];
+                        
+                        return (
+                          <g key={i}>
+                            <line
+                              x1={`${center - currentStage.roadWidth/2}%`}
+                              y1={`${y1}%`}
+                              x2={`${nextCenter - currentStage.roadWidth/2}%`}
+                              y2={`${y2}%`}
+                              stroke="#fbbf24"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                            />
+                            <line
+                              x1={`${center + currentStage.roadWidth/2}%`}
+                              y1={`${y1}%`}
+                              x2={`${nextCenter + currentStage.roadWidth/2}%`}
+                              y2={`${y2}%`}
+                              stroke="#fbbf24"
+                              strokeWidth="3"
+                              strokeLinecap="round"
+                            />
+                            <line
+                              x1={`${center}%`}
+                              y1={`${y1}%`}
+                              x2={`${nextCenter}%`}
+                              y2={`${y2}%`}
+                              stroke="#1f2937"
+                              strokeWidth={`${currentStage.roadWidth}%`}
+                              strokeLinecap="round"
+                            />
+                            {i % 3 === 0 && (
+                              <line
+                                x1={`${center}%`}
+                                y1={`${y1}%`}
+                                x2={`${nextCenter}%`}
+                                y2={`${y2}%`}
+                                stroke="#fef3c7"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeDasharray="8,8"
+                              />
+                            )}
+                          </g>
+                        );
+                      })}
+                    </svg>
+
+                    <div
+                      className="absolute transition-all duration-100"
+                      style={{
+                        left: `${bikePosition}%`,
+                        top: `${progress}%`,
+                        transform: 'translate(-50%, -50%)'
+                      }}
+                    >
+                      <Bike className="w-12 h-12 text-blue-600" style={{ filter: 'drop-shadow(2px 2px 4px rgba(0,0,0,0.8))' }} />
+                    </div>
+
+                    <div 
+                      className="absolute left-1/2 transform -translate-x-1/2"
+                      style={{ top: '100%', marginTop: '-30px' }}
+                    >
+                      <Flag className="w-10 h-10 text-red-600 animate-pulse" />
+                    </div>
+
+                    {(bikePosition < roadCenter - roadHalfWidth + 2 || bikePosition > roadCenter + roadHalfWidth - 2) && (
+                      <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-full font-bold animate-pulse z-10">
+                        ⚠️ 危険！
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-4 text-center text-white text-sm bg-black bg-opacity-50 rounded-lg p-2">
+                    ← → キーで操作
+                  </div>
+                </div>
+              )}
+
+              {gameState === 'gameOver' && (
+                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                  <div className="text-6xl mb-4">💥</div>
+                  <h2 className="text-3xl font-bold mb-4 text-gray-800">ゲームオーバー</h2>
+                  <p className="text-gray-600 mb-2">道から外れてしまいました...</p>
+                  <p className="text-sm text-gray-500 mb-4">ステージ {stage} - {Math.round(progress)}%地点でリタイア</p>
+                  
+                  <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 mb-4">
+                    <p className="text-gray-700 mb-2">最終スコア</p>
+                    <p className="text-4xl font-bold text-blue-600">{score}</p>
+                  </div>
+
+                  {score === highScore && score > 0 && (
+                    <div className="bg-yellow-50 border-2 border-yellow-300 rounded-lg p-3 mb-4">
+                      <Trophy className="w-8 h-8 mx-auto mb-1 text-yellow-600" />
+                      <p className="text-yellow-800 font-bold">🎉 新記録達成！</p>
+                    </div>
+                  )}
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={restartGame}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full transition transform hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-5 h-5" />
+                      リトライ
+                    </button>
+                    <button
+                      onClick={() => setGameState('menu')}
+                      className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full transition transform hover:scale-105"
+                    >
+                      メニュー
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {gameState === 'clear' && (
+                <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                  <div className="text-6xl mb-4">🎉</div>
+                  <h2 className="text-3xl font-bold mb-4 text-yellow-600">ゲームクリア！</h2>
+                  <p className="text-gray-600 mb-2">全ステージ制覇おめでとうございます！</p>
+                  
+                  <div className="bg-gradient-to-r from-yellow-50 to-orange-50 border-2 border-yellow-400 rounded-lg p-6 mb-4">
+                    <Trophy className="w-16 h-16 mx-auto mb-3 text-yellow-600" />
+                    <p className="text-gray-700 mb-2">最終スコア</p>
+                    <p className="text-5xl font-bold text-yellow-600 mb-2">{score}</p>
+                    {score === highScore && (
+                      <p className="text-yellow-800 font-bold">✨ 新記録達成！ ✨</p>
+                    )}
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={restartGame}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full transition transform hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw className="w-5 h-5" />
+                      もう一度
+                    </button>
+                    <button
+                      onClick={() => setGameState('menu')}
+                      className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-full transition transform hover:scale-105"
+                    >
+                      メニュー
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        };
+
+        ReactDOM.render(<BicycleGame />, document.getElementById('root'));
+    </script>
+</body>
+</html>
